@@ -2,6 +2,10 @@
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { Bot, Send, X, Image as ImageIcon, Music, Book } from 'lucide-react';
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+
+
 
 export default function Home() {
   const [isOpen, setIsOpen] = useState(false);
@@ -98,20 +102,20 @@ export default function Home() {
         objectFit="contain"
         priority
       />
-      <button
+      <Button
         onClick={handleOpen}
         className={`fixed bottom-4 right-4 rounded-lg w-12 h-12 bg-[#008A4B] hover:bg-[#006B3A] text-white shadow-lg z-20 transition-all duration-300 ${isJiggling ? 'jiggle' : ''}`}
         aria-label="Open Corner Coach"
       >
         <Bot className="w-6 h-6" />
-      </button>
+      </Button>
       <div
         className={`fixed bottom-4 right-4 w-96 h-[600px] bg-white rounded-lg shadow-xl overflow-hidden z-30 flex flex-col corner-coach-container ${isOpen ? 'open' : 'closed'}`}
         onTransitionEnd={() => setIsAnimating(false)}
       >
         <div className="bg-[#008A4B] text-white p-4 flex justify-between items-center">
           <h2 className="text-lg font-semibold">Corner Coach</h2>
-          <button
+          <Button
             onClick={handleClose}
             variant="ghost"
             size="icon"
@@ -119,10 +123,10 @@ export default function Home() {
             aria-label="Close Corner Coach"
           >
             <X className="w-5 h-5" />
-          </button>
+          </Button>
         </div>
         <div className="bg-[#F4F4F4] p-6 flex justify-around">
-          <button
+          <Button
             variant="ghost"
             size="sm"
             className="flex flex-col items-center justify-center text-[#008A4B] hover:bg-[#E3E3E3] hover:text-[#006B3A] px-2 w-1/3 h-20"
@@ -130,8 +134,8 @@ export default function Home() {
           >
             <ImageIcon className="w-6 h-6 mb-2" />
             <span className="text-xs text-center whitespace-normal leading-tight">Search for an icon</span>
-          </button>
-          <button
+          </Button>
+          <Button
             variant="ghost"
             size="sm"
             className="flex flex-col items-center justify-center text-[#008A4B] hover:bg-[#E3E3E3] hover:text-[#006B3A] px-2 w-1/3 h-20"
@@ -139,8 +143,8 @@ export default function Home() {
           >
             <Music className="w-6 h-6 mb-2" />
             <span className="text-xs text-center whitespace-normal">Browse sonic assets</span>
-          </button>
-          <button
+          </Button>
+          <Button
             variant="ghost"
             size="sm"
             className="flex flex-col items-center justify-center text-[#008A4B] hover:bg-[#E3E3E3] hover:text-[#006B3A] px-2 w-1/3 h-20"
@@ -148,7 +152,7 @@ export default function Home() {
           >
             <Book className="w-6 h-6 mb-2" />
             <span className="text-xs text-center whitespace-normal">Learn about the Brand</span>
-          </button>
+          </Button>
         </div>
         <div ref={chatRef} className="flex-grow overflow-y-auto p-4 space-y-4">
           {messages.map((msg, index) => (
@@ -161,15 +165,15 @@ export default function Home() {
         </div>
         <div className="p-4 border-t">
           <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center">
-            <input
+            <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your message..."
               className="flex-grow"
             />
-            <button type="submit" className="ml-2 bg-[#008A4B] hover:bg-[#006B3A] text-white">
+            <Button type="submit" className="ml-2 bg-[#008A4B] hover:bg-[#006B3A] text-white">
               <Send className="w-4 h-4" />
-            </button>
+            </Button>
           </form>
         </div>
       </div>
