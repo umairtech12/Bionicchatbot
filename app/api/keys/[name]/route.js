@@ -27,7 +27,7 @@ export async function GET(request, { params }) {
                 { status: 403 }
             );
         }
-
+     
         // Get API key from database
         const { data, error } = await supabase
             .from('api_keys')
