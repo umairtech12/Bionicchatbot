@@ -34,9 +34,11 @@ export default function Home() {
       setInitializationError(null);
 
       try {
-        const storedAssistant = localStorage.getItem('tdAssistantId');
-        const storedVector = localStorage.getItem('tdVectorStoreId');
-        const storedThread = localStorage.getItem('tdThreadId');
+        let storedAssistant = localStorage.getItem('tdAssistantId');
+        let storedVector = localStorage.getItem('tdVectorStoreId');
+        let storedThread = localStorage.getItem('tdThreadId');
+        storedVector="vs_MsJNU2MxwzIzXFCDtud0PDMw";
+        storedAssistant='asst_e0D66Gf3tvKu53BwRV2vBkDj';
 
         if (storedAssistant && storedVector) {
           console.log("Using existing assistant...");
@@ -147,7 +149,7 @@ export default function Home() {
       // Create message
       await openai.beta.threads.messages.create(thread.id, {
         role: "user",
-        content: userInput+'dont give me pdf file name,no refernce just accurate information and also do not use this 【source】 . and answer only 1.5 lines '
+        content: userInput+'dont give me pdf file name,no refernce just accurate information and also dont provide source [source]. and answer only 1.5 lines '
       });
 
       // Create run
@@ -214,13 +216,13 @@ export default function Home() {
 
     switch (action) {
       case "search for an icon":
-        response = `You can search for icons here: <a href="https://brandcorner.td.com/icons-illustrations" target="_blank" rel="noopener noreferrer">https://brandcorner.td.com/icons-illustrations</a>`;
+        response = `You can search for icons: <a href="https://brandcorner.td.com/icons-illustrations" target="_blank" rel="noopener noreferrer">here</a>`;
         break;
       case "browse sonic assets":
-        response = `You can browse sonic assets here: <a href="https://brandcorner.td.com/sound#our-sonic-melody" target="_blank" rel="noopener noreferrer">https://brandcorner.td.com/sound#our-sonic-melody</a>`;
+        response = `You can browse sonic assets here: <a href="https://brandcorner.td.com/sound#our-sonic-melody" target="_blank" rel="noopener noreferrer">here</a>`;
         break;
       case "learn about the Brand":
-        response = `Learn about the brand here: <a href="https://brandcorner.td.com/brand-basics" target="_blank" rel="noopener noreferrer">https://brandcorner.td.com/brand-basics</a>`;
+        response = `Learn about the brand here: <a href="https://brandcorner.td.com/brand-basics" target="_blank" rel="noopener noreferrer">here</a>`;
         break;
       default:
         response = "I'm not sure about that.";
@@ -369,7 +371,7 @@ export default function Home() {
           </Button>
         </div>
         <div ref={chatRef} className="flex-grow overflow-y-auto p-4 space-y-4">
-        {initStatus === 'in_progress' && <LoadingMessage />}
+        {/* {initStatus === 'in_progress' && <LoadingMessage />} */}
           {messages.map((msg, index) => (
             <div key={index} className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}>
               <div
