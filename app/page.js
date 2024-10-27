@@ -12,9 +12,7 @@ const openai = new OpenAI({
 });
 
 export default function Home() {
-
   const [hasVisited, setHasVisited] = useState(false);
-
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -22,89 +20,93 @@ export default function Home() {
   const [isJiggling, setIsJiggling] = useState(false);
   const chatRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [documentsContent, setDocumentsContent] = useState('');
+  const [assistant, setAssistant] = useState(null);
+  const [vectorStore, setVectorStore] = useState(null);
+  const [thread, setThread] = useState(null);
 
-  // Define files to read within the component
-  const textFiles = [
-    '/Logo_TDBrandCorner.txt'
-  ];
-
-  // Function to read text files
-  const readTextFile = async (filePath) => {
-    try {
-      console.log(`Attempting to read file: ${filePath}`);
-      const response = await fetch(filePath);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const content = await response.text();
-      console.log(`Successfully read file: ${filePath}`);
-      return content;
-    } catch (error) {
-      console.error(`Error reading file ${filePath}:`, error);
-      return `Error reading file ${filePath}: ${error.message}`;
-    }
-  };
-
-  // Load text files on component mount
+  // Initialize assistant and vector store
   useEffect(() => {
-    const loadAllFiles = async () => {
-      setIsLoading(true);
-      let allContent = '';
-
+    async function initializeAssistant() {
       try {
-        for (const filePath of textFiles) {
-          console.log(`Processing file: ${filePath}`);
-          const content = await readTextFile(filePath);
-          allContent += `\nDocument (${filePath}):\n${content}\n---\n`;
-        }
+        // Create assistant
+        const newAssistant = await openai.beta.assistants.create({
+          name: "TD Brand Assistant",
+          instructions: "You are an expert on TD Brand guidelines. Use the knowledge base to answer questions about TD brand assets and guidelines.",
+          model: "gpt-4-turbo-preview",
+          tools: [{ type: "file_search" }],
+        });
+        setAssistant(newAssistant);
 
-        setDocumentsContent(allContent);
-        console.log('All files loaded successfully');
+        // Create vector store
+        const newVectorStore = await openai.beta.vectorStores.create({
+          name: "TD Brand Guidelines",
+        });
+        setVectorStore(newVectorStore);
+
+        // Upload files to vector store
+        const fileStreams = ["/Logo_TD_Brand_Corner.pdf"].map((path) =>
+          fs.createReadStream(path)
+        );
+
+        await openai.beta.vectorStores.fileBatches.uploadAndPoll(
+          newVectorStore.id, 
+          fileStreams
+        );
+
+        // Update assistant with vector store
+        await openai.beta.assistants.update(newAssistant.id, {
+          tool_resources: { 
+            file_search: { 
+              vector_store_ids: [newVectorStore.id] 
+            } 
+          },
+        });
+
+        // Create initial thread
+        const newThread = await openai.beta.threads.create();
+        setThread(newThread);
+
       } catch (error) {
-        console.error('Error loading files:', error);
-      } finally {
-        setIsLoading(false);
+        console.error("Error initializing assistant:", error);
       }
-    };
-
-    loadAllFiles();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const visited = sessionStorage.getItem('hasVisited');
-
-      setHasVisited(visited);
     }
+
+    initializeAssistant();
   }, []);
 
   const getOpenAIResponse = async (userInput) => {
     try {
-      if (!documentsContent) {
-        return "I'm still loading the document content. Please try again in a moment.";
+      if (!thread || !assistant) {
+        return "Still initializing. Please try again in a moment.";
       }
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-         
-            { 
-              role: "system", 
-              content: `You are a helpful assistant. Use this document content to answer questions:\n\n${documentsContent}`
-            }
-          ,
-          {
-            role: "user", 
-            content: `${false ? "based upon the previous history chat at content provided please check that query and help " : ""}+${userInput}`
-          }
-        ]
-        
+      // Add message to thread
+      await openai.beta.threads.messages.create(thread.id, {
+        role: "user",
+        content: userInput
       });
-      
-      return completion.choices[0].message.content;
+
+      // Create and run the thread
+      const run = await openai.beta.threads.runs.create(thread.id, {
+        assistant_id: assistant.id
+      });
+
+      // Poll for completion
+      let response = null;
+      while (!response) {
+        const runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+        if (runStatus.status === 'completed') {
+          const messages = await openai.beta.threads.messages.list(thread.id);
+          response = messages.data[0].content[0].text.value;
+        } else if (runStatus.status === 'failed') {
+          throw new Error('Run failed');
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      return response;
+
     } catch (error) {
       console.error("OpenAI API error:", error);
       return "Sorry, I encountered an error processing your request. Please try again.";
