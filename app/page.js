@@ -1,36 +1,169 @@
-'use client';
+"use client"
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { Bot, Send, X, Image as ImageIcon, Music, Book } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import OpenAI from 'openai';
 
-
+const openai = new OpenAI({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true
+});
 
 export default function Home() {
+
+  const [hasVisited, setHasVisited] = useState(false);
+
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isJiggling, setIsJiggling] = useState(false);
   const chatRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [documentsContent, setDocumentsContent] = useState('');
 
-  const handleSend = () => {
-    if (input.trim()) {
-      setMessages([...messages, { text: input, isUser: true }]);
-      setInput('');
-      // Simulate bot response
-      setTimeout(() => {
-        setMessages((prev) => [...prev, { text: "Hi, I'm Corner Coach! I'm here to help you navigate the TD Brand Corner. What would you like to know?", isUser: false }]);
-      }, 1000);
+  // Define files to read within the component
+  const textFiles = [
+    '/Logo_TDBrandCorner.txt'
+  ];
+
+  // Function to read text files
+  const readTextFile = async (filePath) => {
+    try {
+      console.log(`Attempting to read file: ${filePath}`);
+      const response = await fetch(filePath);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const content = await response.text();
+      console.log(`Successfully read file: ${filePath}`);
+      return content;
+    } catch (error) {
+      console.error(`Error reading file ${filePath}:`, error);
+      return `Error reading file ${filePath}: ${error.message}`;
     }
   };
 
+  // Load text files on component mount
+  useEffect(() => {
+    const loadAllFiles = async () => {
+      setIsLoading(true);
+      let allContent = '';
+
+      try {
+        for (const filePath of textFiles) {
+          console.log(`Processing file: ${filePath}`);
+          const content = await readTextFile(filePath);
+          allContent += `\nDocument (${filePath}):\n${content}\n---\n`;
+        }
+
+        setDocumentsContent(allContent);
+        console.log('All files loaded successfully');
+      } catch (error) {
+        console.error('Error loading files:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAllFiles();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const visited = sessionStorage.getItem('hasVisited');
+
+      setHasVisited(visited);
+    }
+  }, []);
+
+  const getOpenAIResponse = async (userInput) => {
+    try {
+      if (!documentsContent) {
+        return "I'm still loading the document content. Please try again in a moment.";
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+         
+            { 
+              role: "system", 
+              content: `You are a helpful assistant. Use this document content to answer questions:\n\n${documentsContent}`
+            }
+          ,
+          {
+            role: "user", 
+            content: `${false ? "based upon the previous history chat at content provided please check that query and help " : ""}+${userInput}`
+          }
+        ]
+        
+      });
+      
+      return completion.choices[0].message.content;
+    } catch (error) {
+      console.error("OpenAI API error:", error);
+      return "Sorry, I encountered an error processing your request. Please try again.";
+    }
+  };
+
+  // Handle send button click
+  const handleSend = async () => {
+    if (!hasVisited) {
+      sessionStorage.setItem('hasVisited', true);
+    }
+    
+    if (input.trim()) {
+      setIsLoading(true);
+      
+      // Add user message immediately
+      setMessages(prev => [...prev, { text: input, isUser: true }]);
+      
+      try {
+        // Get response from OpenAI
+        const aiResponse = await getOpenAIResponse(input);
+        
+        // Add AI response to messages
+        setMessages(prev => [...prev, { text: aiResponse, isUser: false }]);
+      } catch (error) {
+        console.error("Error in handleSend:", error);
+        setMessages(prev => [...prev, { 
+          text: "Sorry, I encountered an error. Please try again.", 
+          isUser: false 
+        }]);
+      }
+      
+      // Clear input and loading state
+      setInput('');
+      setIsLoading(false);
+    }
+  };
+
+
   const handleShortcut = (action) => {
+    let response;
+
+    switch (action) {
+      case "search for an icon":
+        response = `You can search for icons here: <a href="https://brandcorner.td.com/icons-illustrations" target="_blank" rel="noopener noreferrer">https://brandcorner.td.com/icons-illustrations</a>`;
+        break;
+      case "browse sonic assets":
+        response = `You can browse sonic assets here: <a href="https://brandcorner.td.com/sound#our-sonic-melody" target="_blank" rel="noopener noreferrer">https://brandcorner.td.com/sound#our-sonic-melody</a>`;
+        break;
+      case "learn about the Brand":
+        response = `Learn about the brand here: <a href="https://brandcorner.td.com/brand-basics" target="_blank" rel="noopener noreferrer">https://brandcorner.td.com/brand-basics</a>`;
+        break;
+      default:
+        response = "I'm not sure about that.";
+    }
+
     setMessages([...messages, { text: `I'd like to ${action}`, isUser: true }]);
-    // Simulate bot response
     setTimeout(() => {
-      setMessages((prev) => [...prev, { text: `Great! I can help you ${action}. Here's how to get started...`, isUser: false }]);
+      setMessages((prev) => [...prev, { text: response, isUser: false, isHTML: true }]);
     }, 1000);
   };
 
@@ -157,21 +290,34 @@ export default function Home() {
         <div ref={chatRef} className="flex-grow overflow-y-auto p-4 space-y-4">
           {messages.map((msg, index) => (
             <div key={index} className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}>
-              <div className={`rounded-lg px-4 py-2 max-w-[80%] ${msg.isUser ? 'bg-[#008A4B] text-white' : 'bg-[#F4F4F4] text-black'}`}>
-                {msg.text}
-              </div>
+              <div
+                className={`rounded-lg px-4 py-2 max-w-[80%] ${msg.isUser ? 'bg-[#008A4B] text-white' : 'bg-[#F4F4F4] text-black'} ${msg.isHTML ? 'html-content' : ''}`}
+                {...(msg.isHTML
+                  ? { dangerouslySetInnerHTML: { __html: msg.text } }
+                  : { children: msg.text })}
+              />
             </div>
           ))}
         </div>
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-[#F4F4F4] text-black rounded-lg px-4 py-2">
+              <span className="animate-pulse">Thinking...</span>
+            </div>
+          </div>
+        )}
         <div className="p-4 border-t">
-          <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your message..."
-              className="flex-grow"
-            />
-            <Button type="submit" className="ml-2 bg-[#008A4B] hover:bg-[#006B3A] text-white">
+        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center">
+        <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your message..."
+            className="flex-grow"
+            disabled={isLoading}
+          />
+            <Button
+              disabled={isLoading}
+            type="submit" className="ml-2 bg-[#008A4B] hover:bg-[#006B3A] text-white">
               <Send className="w-4 h-4" />
             </Button>
           </form>
@@ -179,9 +325,9 @@ export default function Home() {
       </div>
       {(isOpen || isAnimating) && (
         <div
-          className={`fixed inset-0 bg-black transition-opacity duration-300 ${isOpen ? 'bg-opacity-50' : 'bg-opacity-0'}`}
-          aria-hidden="true"
-        />
+          className={`fixed inset-0 bg-black bg-opacity-50 z-10 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={handleClose}
+        ></div>
       )}
     </div>
   );
