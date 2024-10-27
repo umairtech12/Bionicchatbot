@@ -25,6 +25,8 @@ export default function Home() {
   const [thread, setThread] = useState(null);
   const [initializationError, setInitializationError] = useState(null);
   const [initStatus, setInitStatus] = useState('not_started');
+  const [text, setText] = useState('Typing');
+
 
   useEffect(() => {
     async function initializeAssistant() {
@@ -272,7 +274,59 @@ export default function Home() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen]);
+  const renderMessageText = (text) => {
+    
+    const formattedText = text?.replace(/_/g, ' ');
+  
+    // Match the special format and handle source removal
+    const cleanText = formattedText?.replace(/【(.*?)】/g, (match, p1) => {
+      if (p1 && !p1.includes('source')) {
+        return `[${p1.trim()}]`; // Convert to brackets if it doesn't contain "source"
+      }
+      return ''; // Remove the entire match if it contains "source"
+    });
+  
+    // Split on square brackets for styling
+    const parts = cleanText?.split(/(\[[^\]]+\])/g).filter(Boolean); // Filter out empty parts
+  
+    return parts.map((part, idx) => {
+      // Check if part is a bracketed text
+      if (part?.startsWith('[') && part?.endsWith(']')) {
+        // Remove the †, preceding data, and .pdf
+        const cleanedPart = part
+          .replace(/^\[\d+:\d+†/, '[ ') // Remove any data before and including '†'
+          .replace(/\.pdf/g, '') // Remove any instance of .pdf
+          .trim(); // Trim any extra spaces
 
+        return (
+          <span key={idx} className="text-green-500 text-xs">{"  " + cleanedPart}</span> // Green extra small text
+        );
+      }
+  
+      // Regular text
+      return (
+        <span key={idx}>{part}</span>
+      );
+    });
+  };
+  
+  
+  
+  useEffect(() => {
+    if (isLoading) {
+      const typingSequence = ["Typing.", "Typing..", "Typing..."];
+      let index = 0;
+
+      const typingInterval = setInterval(() => {
+        setText(typingSequence[index]);
+        index = (index + 1) % typingSequence?.length; // Loop back to the start
+      }, 700); // Adjust the delay as needed
+
+      return () => clearInterval(typingInterval);
+    } else {
+      setText('Typing');
+    }
+  }, [isLoading]);
   const LoadingMessage = () => (
     <div className="flex justify-start">
       <div className="bg-[#F4F4F4] text-black rounded-lg px-4 py-3">
@@ -372,26 +426,37 @@ export default function Home() {
           </Button>
         </div>
         <div ref={chatRef} className="flex-grow overflow-y-auto p-4 space-y-4">
-        {/* {initStatus === 'in_progress' && <LoadingMessage />} */}
-          {messages.map((msg, index) => (
-            <div key={index} className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`rounded-lg px-4 py-2 max-w-[80%] ${msg.isUser ? 'bg-[#008A4B] text-white' : 'bg-[#F4F4F4] text-black'} ${msg.isHTML ? 'html-content' : ''}`}
-                {...(msg.isHTML
-                  ? { dangerouslySetInnerHTML: { __html: msg.text } }
-                  : { children: msg.text })}
-              />
-            </div>
-          ))}
+  {/* {initStatus === 'in_progress' && <LoadingMessage />} */}
+  {messages?.map((msg, index) => {
+    // Function to render text with styled brackets content
+ 
+
+    return (
+      <div key={index} className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}>
+        <div
+          className={`rounded-lg px-4 py-2 max-w-[80%] ${msg.isUser ? 'bg-[#008A4B] text-white' : 'bg-[#F4F4F4] text-black'} ${msg.isHTML ? 'html-content' : ''}`}
+        >
+          {msg.isHTML ? (
+            <div dangerouslySetInnerHTML={{ __html: msg.text }} />
+          ) : (
+            renderMessageText(msg.text) // Render the text with formatted special characters
+          )}
         </div>
+      </div>
+    );
+  })}
+</div>
+
+
+
         {isLoading && (
-          <div className="flex justify-start">
+            <div className="flex justify-start">
             <div className="bg-[#F4F4F4] text-black rounded-lg px-4 py-2">
-              <span className="animate-pulse">Thinking...</span>
+              <span className="text-green-500">{text}</span>
             </div>
           </div>
         )}
-        <div className="p-4 border-t">
+        <div className="px-4 pt-4 border-t">
         <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center">
         <Input
             value={input}
@@ -405,8 +470,18 @@ export default function Home() {
             type="submit" className="ml-2 bg-[#008A4B] hover:bg-[#006B3A] text-white">
               <Send className="w-4 h-4" />
             </Button>
+           
           </form>
         </div>
+        <button
+                 disabled={isLoading || initStatus !== 'completed'}
+                 onClick={()=>setMessages([])}
+                 style={{opacity:"0.05"}}
+            type="button" className="  border-none">
+              .
+            </button>
+           
+
       </div>
       {(isOpen || isAnimating) && (
         <div
