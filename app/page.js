@@ -147,9 +147,10 @@ export default function Home() {
 
     try {
       // Create message
+   
       await openai.beta.threads.messages.create(thread.id, {
         role: "user",
-        content: userInput+'dont give me pdf file name,no refernce just accurate information and also dont provide source [source]. and answer only 1.5 lines '
+        content: 'help please'+userInput+'dont give me pdf file name,no refernce just accurate information and also dont provide source [source]. and answer only 1.5 lines'
       });
 
       // Create run
