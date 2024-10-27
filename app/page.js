@@ -5,6 +5,7 @@ import { Bot, Send, X, Image as ImageIcon, Music, Book } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import OpenAI from 'openai';
+import { brandFiles } from '@/lib/filesPath';
 
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
@@ -23,37 +24,56 @@ export default function Home() {
   const [assistant, setAssistant] = useState(null);
   const [vectorStore, setVectorStore] = useState(null);
   const [thread, setThread] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Initialize assistant and vector store
   useEffect(() => {
     async function initializeAssistant() {
       try {
-        // Create assistant
+        setUploadStatus('Starting initialization...');
+        
+        // 1. Create assistant first
         const newAssistant = await openai.beta.assistants.create({
           name: "TD Brand Assistant",
-          instructions: "You are an expert on TD Brand guidelines. Use the knowledge base to answer questions about TD brand assets and guidelines.",
+          instructions: `You are an expert on TD Brand guidelines and documentation. 
+                       Answer questions based on all provided brand documents and guidelines.
+                       Always cite specific sources when providing information.`,
           model: "gpt-4-turbo-preview",
           tools: [{ type: "file_search" }],
         });
         setAssistant(newAssistant);
+        setUploadStatus('Assistant created successfully');
 
-        // Create vector store
+        // 2. Create vector store
         const newVectorStore = await openai.beta.vectorStores.create({
-          name: "TD Brand Guidelines",
+          name: "TD Brand Guidelines Complete",
         });
         setVectorStore(newVectorStore);
+        setUploadStatus('Vector store created');
 
-        // Upload files to vector store
-        const fileStreams = ["/Logo_TD_Brand_Corner.pdf"].map((path) =>
-          fs.createReadStream(path)
-        );
+        // 3. Process files in batches to avoid timeouts
+        const BATCH_SIZE = 3; // Process 3 files at a time
+        for (let i = 0; i < brandFiles.length; i += BATCH_SIZE) {
+          const batch = brandFiles.slice(i, i + BATCH_SIZE);
+          setUploadStatus(`Processing batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(brandFiles.length/BATCH_SIZE)}`);
+          
+          try {
+            const fileStreams = batch.map(path => fs.createReadStream(path));
+            
+            await openai.beta.vectorStores.fileBatches.uploadAndPoll(
+              newVectorStore.id, 
+              fileStreams,
+              {
+                timeout: 120000 // 2 minute timeout for larger files
+              }
+            );
+          } catch (error) {
+            console.error(`Error processing batch ${Math.floor(i/BATCH_SIZE) + 1}:`, error);
+            setUploadStatus(`Error in batch ${Math.floor(i/BATCH_SIZE) + 1}. Continuing with remaining files...`);
+          }
+        }
 
-        await openai.beta.vectorStores.fileBatches.uploadAndPoll(
-          newVectorStore.id, 
-          fileStreams
-        );
-
-        // Update assistant with vector store
+        // 4. Update assistant with the vector store
         await openai.beta.assistants.update(newAssistant.id, {
           tool_resources: { 
             file_search: { 
@@ -61,18 +81,25 @@ export default function Home() {
             } 
           },
         });
+        setUploadStatus('Assistant updated with all files');
 
-        // Create initial thread
+        // 5. Create initial thread
         const newThread = await openai.beta.threads.create();
         setThread(newThread);
+        
+        setIsInitialized(true);
+        setUploadStatus('System ready!');
 
       } catch (error) {
-        console.error("Error initializing assistant:", error);
+        console.error("Initialization error:", error);
+        setUploadStatus('Error during initialization. Please refresh the page.');
       }
     }
 
-    initializeAssistant();
-  }, []);
+    if (!isInitialized) {
+      initializeAssistant();
+    }
+  }, [isInitialized]);
 
   const getOpenAIResponse = async (userInput) => {
     try {
