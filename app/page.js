@@ -34,6 +34,23 @@ export default function Home() {
       setInitializationError(null);
 
       try {
+        const storedAssistant = localStorage.getItem('tdAssistantId');
+        const storedVector = localStorage.getItem('tdVectorStoreId');
+        const storedThread = localStorage.getItem('tdThreadId');
+
+        if (storedAssistant && storedVector) {
+          console.log("Using existing assistant...");
+          
+          // Create new thread even if we have existing assistant
+          const newThread = await openai.beta.threads.create();
+          setThread(newThread);
+          
+          // Set states from stored values
+          setAssistant({ id: storedAssistant });
+          setInitStatus('completed');
+          console.log("Using existing assistant:", storedAssistant);
+          return;
+        }
         console.log("Starting initialization process...");
         
         // Step 1: Upload files first
@@ -75,6 +92,7 @@ export default function Home() {
           }
         });
         console.log("Vector store created:", vectorStore.id);
+        localStorage.setItem('tdVectorStoreId', vectorStore.id);
 
         // Step 3: Create assistant with vector store
         console.log("Creating assistant with vector store...");
@@ -89,14 +107,16 @@ export default function Home() {
             }
           }
         });
-        
+        localStorage.setItem('tdAssistantId', newAssistant.id);
         console.log("Assistant created:", newAssistant);
+       
         setAssistant(newAssistant);
 
         // Step 4: Create thread
         const newThread = await openai.beta.threads.create();
         setThread(newThread);
         console.log("Thread created:", newThread.id);
+        localStorage.setItem('tdThreadId' , newThread);
 
         setInitStatus('completed');
         console.log("Initialization completed successfully");
@@ -105,6 +125,9 @@ export default function Home() {
         console.error("Initialization error:", error);
         setInitializationError(error.message);
         setInitStatus('failed');
+        localStorage.removeItem('tdAssistantId');
+        localStorage.removeItem('tdVectorStoreId');
+        localStorage.removeItem('tdThreadId');
       }
     }
 
