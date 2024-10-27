@@ -22,98 +22,112 @@ export default function Home() {
   const chatRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const [assistant, setAssistant] = useState(null);
-  const [vectorStore, setVectorStore] = useState(null);
   const [thread, setThread] = useState(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [initializationError, setInitializationError] = useState(null);
+  const [initStatus, setInitStatus] = useState('not_started');
 
-  // Initialize assistant and vector store
   useEffect(() => {
     async function initializeAssistant() {
+      if (initStatus !== 'not_started') return;
+      
+      setInitStatus('in_progress');
+      setInitializationError(null);
+
       try {
-        setUploadStatus('Starting initialization...');
+        console.log("Starting initialization process...");
         
-        // 1. Create assistant first
-        const newAssistant = await openai.beta.assistants.create({
-          name: "TD Brand Assistant",
-          instructions: `You are an expert on TD Brand guidelines and documentation. 
-                       Answer questions based on all provided brand documents and guidelines.
-                       Always cite specific sources when providing information.`,
-          model: "gpt-4-turbo-preview",
-          tools: [{ type: "file_search" }],
-        });
-        setAssistant(newAssistant);
-        setUploadStatus('Assistant created successfully');
-
-        // 2. Create vector store
-        const newVectorStore = await openai.beta.vectorStores.create({
-          name: "TD Brand Guidelines Complete",
-        });
-        setVectorStore(newVectorStore);
-        setUploadStatus('Vector store created');
-
-        // 3. Process files in batches to avoid timeouts
-        const BATCH_SIZE = 3; // Process 3 files at a time
-        for (let i = 0; i < brandFiles.length; i += BATCH_SIZE) {
-          const batch = brandFiles.slice(i, i + BATCH_SIZE);
-          setUploadStatus(`Processing batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(brandFiles.length/BATCH_SIZE)}`);
-          
+        // Step 1: Upload files first
+        const fileIds = [];
+        for (const filePath of brandFiles) {
           try {
-            const fileStreams = batch.map(path => fs.createReadStream(path));
+            const response = await fetch(filePath);
+            if (!response.ok) throw new Error(`Failed to fetch ${filePath}`);
             
-            await openai.beta.vectorStores.fileBatches.uploadAndPoll(
-              newVectorStore.id, 
-              fileStreams,
-              {
-                timeout: 120000 // 2 minute timeout for larger files
-              }
-            );
-          } catch (error) {
-            console.error(`Error processing batch ${Math.floor(i/BATCH_SIZE) + 1}:`, error);
-            setUploadStatus(`Error in batch ${Math.floor(i/BATCH_SIZE) + 1}. Continuing with remaining files...`);
+            const blob = await response.blob();
+            const filename = filePath.split('/').pop();
+            const file = new File([blob], filename, { type: 'application/pdf' });
+            
+            console.log(`Uploading file: ${filename}`);
+            const fileUpload = await openai.files.create({
+              file: file,
+              purpose: 'assistants'
+            });
+            
+            fileIds.push(fileUpload.id);
+            console.log(`File uploaded successfully: ${fileUpload.id}`);
+          } catch (fileError) {
+            console.error("Error uploading file:", filePath, fileError);
           }
         }
 
-        // 4. Update assistant with the vector store
-        await openai.beta.assistants.update(newAssistant.id, {
-          tool_resources: { 
-            file_search: { 
-              vector_store_ids: [newVectorStore.id] 
-            } 
-          },
-        });
-        setUploadStatus('Assistant updated with all files');
+        if (fileIds.length === 0) {
+          throw new Error("No files were uploaded successfully");
+        }
 
-        // 5. Create initial thread
+        // Step 2: Create vector store with file IDs
+        console.log("Creating vector store with files:", fileIds);
+        const vectorStore = await openai.beta.vectorStores.create({
+          name: "TD-Brand-Guidelines-Store",
+          file_ids: fileIds,
+          expires_after: {
+            anchor: "last_active_at",
+            days: 30 
+          }
+        });
+        console.log("Vector store created:", vectorStore.id);
+
+        // Step 3: Create assistant with vector store
+        console.log("Creating assistant with vector store...");
+        const newAssistant = await openai.beta.assistants.create({
+          name: "TD Brand Assistant",
+          instructions: "You are an expert on TD Brand guidelines. Use the knowledge base to answer questions about TD brand assets and guidelines and dont give me pdf file name,no refernce just accurate information.",
+          model: "gpt-4-turbo-preview",
+          tools: [{ type: "file_search" }],
+          tool_resources: {
+            "file_search": {
+              "vector_store_ids": [vectorStore.id]
+            }
+          }
+        });
+        
+        console.log("Assistant created:", newAssistant);
+        setAssistant(newAssistant);
+
+        // Step 4: Create thread
         const newThread = await openai.beta.threads.create();
         setThread(newThread);
-        
-        setIsInitialized(true);
-        setUploadStatus('System ready!');
+        console.log("Thread created:", newThread.id);
+
+        setInitStatus('completed');
+        console.log("Initialization completed successfully");
 
       } catch (error) {
         console.error("Initialization error:", error);
-        setUploadStatus('Error during initialization. Please refresh the page.');
+        setInitializationError(error.message);
+        setInitStatus('failed');
       }
     }
 
-    if (!isInitialized) {
-      initializeAssistant();
-    }
-  }, [isInitialized]);
+    initializeAssistant();
+  }, [initStatus]);
 
   const getOpenAIResponse = async (userInput) => {
-    try {
-      if (!thread || !assistant) {
-        return "Still initializing. Please try again in a moment.";
-      }
+    if (initStatus !== 'completed') {
+      return `System initialization ${initStatus}. Please wait or refresh the page if this persists.`;
+    }
 
-      // Add message to thread
+    if (!thread || !assistant) {
+      return "System not properly initialized. Please refresh the page.";
+    }
+
+    try {
+      // Create message
       await openai.beta.threads.messages.create(thread.id, {
         role: "user",
-        content: userInput
+        content: userInput+'dont give me pdf file name,no refernce just accurate information and also do not use this 【source】 . and answer only 1.5 lines '
       });
 
-      // Create and run the thread
+      // Create run
       const run = await openai.beta.threads.runs.create(thread.id, {
         assistant_id: assistant.id
       });
@@ -122,56 +136,55 @@ export default function Home() {
       let response = null;
       while (!response) {
         const runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+        
         if (runStatus.status === 'completed') {
           const messages = await openai.beta.threads.messages.list(thread.id);
           response = messages.data[0].content[0].text.value;
-        } else if (runStatus.status === 'failed') {
-          throw new Error('Run failed');
-        } else {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          break;
+        } 
+        
+        if (runStatus.status === 'failed' || runStatus.status === 'expired') {
+          throw new Error(`Run ${runStatus.status}: ${runStatus.last_error?.message || 'Unknown error'}`);
         }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       return response;
 
     } catch (error) {
       console.error("OpenAI API error:", error);
-      return "Sorry, I encountered an error processing your request. Please try again.";
+      return `Error: ${error.message}. Please try again.`;
     }
   };
-
-  // Handle send button click
   const handleSend = async () => {
-    if (!hasVisited) {
-      sessionStorage.setItem('hasVisited', true);
-    }
+    if (!input.trim()) return;
     
-    if (input.trim()) {
-      setIsLoading(true);
-      
-      // Add user message immediately
-      setMessages(prev => [...prev, { text: input, isUser: true }]);
-      
-      try {
-        // Get response from OpenAI
-        const aiResponse = await getOpenAIResponse(input);
-        
-        // Add AI response to messages
-        setMessages(prev => [...prev, { text: aiResponse, isUser: false }]);
-      } catch (error) {
-        console.error("Error in handleSend:", error);
-        setMessages(prev => [...prev, { 
-          text: "Sorry, I encountered an error. Please try again.", 
-          isUser: false 
-        }]);
-      }
-      
-      // Clear input and loading state
-      setInput('');
-      setIsLoading(false);
+    if (!assistant || !thread) {
+      setMessages(prev => [...prev, {
+        text: "Please upload files first to initialize the assistant.",
+        isUser: false
+      }]);
+      return;
     }
-  };
 
+    setIsLoading(true);
+    setMessages(prev => [...prev, { text: input, isUser: true }]);
+
+    try {
+      const response = await getOpenAIResponse(input);
+      setMessages(prev => [...prev, { text: response, isUser: false }]);
+    } catch (error) {
+      console.error("Error in handleSend:", error);
+      setMessages(prev => [...prev, {
+        text: "Sorry, I encountered an error. Please try again.",
+        isUser: false
+      }]);
+    }
+
+    setInput('');
+    setIsLoading(false);
+  };
 
   const handleShortcut = (action) => {
     let response;
@@ -233,6 +246,22 @@ export default function Home() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen]);
+
+  const LoadingMessage = () => (
+    <div className="flex justify-start">
+      <div className="bg-[#F4F4F4] text-black rounded-lg px-4 py-3">
+        <div className="flex flex-col space-y-2">
+          <div className="flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#008A4B]"></div>
+            <span className="font-medium">Just a moment...</span>
+          </div>
+          <span className="text-sm text-gray-600">
+            Please wait 1 minute while I prepare to assist you.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="relative w-full h-screen">
@@ -317,6 +346,7 @@ export default function Home() {
           </Button>
         </div>
         <div ref={chatRef} className="flex-grow overflow-y-auto p-4 space-y-4">
+        {initStatus === 'in_progress' && <LoadingMessage />}
           {messages.map((msg, index) => (
             <div key={index} className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}>
               <div
@@ -342,10 +372,10 @@ export default function Home() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message..."
             className="flex-grow"
-            disabled={isLoading}
+            disabled={isLoading || initStatus !== 'completed'}
           />
             <Button
-              disabled={isLoading}
+                 disabled={isLoading || initStatus !== 'completed'}
             type="submit" className="ml-2 bg-[#008A4B] hover:bg-[#006B3A] text-white">
               <Send className="w-4 h-4" />
             </Button>
