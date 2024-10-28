@@ -451,11 +451,11 @@ export default function Home() {
 
         {isLoading && (
             <div className="flex justify-start">
-            <div className="bg-[#F4F4F4] text-black rounded-lg px-4 py-2">
-              <span className="text-green-500">{text}</span>
+            <div className="bg-[#F4F4F4] text-black rounded-lg px-4 py-2"  style={{width:"100px"}}>
+              <span className="text-green-500" >{text}</span>
             </div>
           </div>
-        )}
+        )} 
         <div className="px-4 pt-4 border-t">
         <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center">
         <Input
