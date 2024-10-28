@@ -39,8 +39,8 @@ export default function Home() {
         let storedAssistant = localStorage.getItem('tdAssistantId');
         let storedVector = localStorage.getItem('tdVectorStoreId');
         let storedThread = localStorage.getItem('tdThreadId');
-        storedVector="vs_MsJNU2MxwzIzXFCDtud0PDMw";
-        storedAssistant='asst_e0D66Gf3tvKu53BwRV2vBkDj';
+        storedVector="vs_mTe90xIKEiS0UU5ugL6TxLD5";
+        storedAssistant='asst_iWWjE0UTyMZkt1XHz4i0ONAt';
 
         if (storedAssistant && storedVector) {
           console.log("Using existing assistant...");
@@ -102,7 +102,7 @@ export default function Home() {
         console.log("Creating assistant with vector store...");
         const newAssistant = await openai.beta.assistants.create({
           name: "TD Brand Assistant",
-          instructions: "You are an expert on TD Brand guidelines. Use the knowledge base to answer questions about TD brand assets and guidelines and dont give me pdf file name,no refernce just accurate information.",
+          instructions: "You are an expert on TD Brand guidelines. Use the knowledge base to answer questions about TD brand assets and guidelines just accurate information.",
           model: "gpt-4-turbo-preview",
           tools: [{ type: "file_search" }],
           tool_resources: {
@@ -152,7 +152,7 @@ export default function Home() {
    
       await openai.beta.threads.messages.create(thread.id, {
         role: "user",
-        content: 'help please'+userInput+'dont give me pdf file name,no refernce just accurate information and also dont provide source [source]. and answer only 1.5 lines'
+        content: 'help please'+userInput+' just accurate information and answer only 1.5 lines'
       });
 
       // Create run
