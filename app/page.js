@@ -472,8 +472,9 @@ export default function Home() {
             </Button>
            
           </form>
-          <p className='text-sm w-[80%] mt-2'>AI-generated outputs may contain errors. 
-          Always verify results with human oversight.</p>
+        {(messages?.length > 1) &&
+          <p className='text-[12px] w-[80%] mt-2 text-gray-500'>AI-generated outputs may contain errors. 
+          Always verify results with human oversight.</p>}
         </div>
         <button
                  disabled={isLoading || initStatus !== 'completed'}
